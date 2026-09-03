@@ -29,12 +29,12 @@
 
 ## Overview
 
-We present **RelightFormer**, a feed-forward generative transformer for multiview object relighting. Our method enables realistic relighting of 3D objects from multiple viewpoints with unprecedented quality and efficiency.
+**RelightFormer** achieves image relighting by replacing traditional inverse rendering with a feedforward generative Transformer. By injecting target lighting into spatial features and processing multiple views symmetrically, it delivers photorealistic results. Trained on **our new, largest open-source multi-view relighting dataset**, it achieves top quality and remarkable broad scene generalization. 
 
 - 🏹 **Feed-forward Architecture**: No iterative optimization required
 - 🌟 **Multiview Consistency**: Coherent relighting across all viewpoints  
-- ⚡ **Fast Inference**: Real-time performance on modern GPUs
-- 🎨 **High Quality**: Photorealistic relighting results
+- ⚡ **Perfomant Inference**: Expeditious execution on modern GPUs
+- 🎨 **Competitive Quality**: Photorealistic relighting results
 
 ## 📦 Dataset & Code
 
