@@ -45,11 +45,3 @@ We present **RelightFormer**, a feed-forward generative transformer for multivie
 ## 📄 License
 
 This work is licensed under CC BY-NC-SA 4.0.
-
----
-
-<p align="center">
-  <a href="https://huggingface.co/datasets/vLAR/LavalObjaverseDataset">
-    <img src="https://img.shields.io/badge/🤗-Download%20Dataset-blue?style=for-the-badge" alt="Download Dataset">
-  </a>
-</p>
