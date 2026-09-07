@@ -46,10 +46,10 @@ Once the prerequisites are met and the environment is configured, launch the aut
 bash ./blender/render.sh --blender path/to/your/blender
 ```
 
-If you would like to render solely the testing split with 2 specific GPUs (e.g. GPU-0, GPU-1), with 8 worker each:
+If you would like to render solely the testing split with 2 specific GPUs (e.g. GPU-0, GPU-1), with 8 worker each, and your path to blender is `./blender/blender-4.3.2-linux-x64/blender`:
 
 ```bash
-bash ./render.sh \
+bash ./blender/render.sh \
   --blender ./blender-4.3.2-linux-x64/blender \
   --split testing \
   --gpus 0 1 \
