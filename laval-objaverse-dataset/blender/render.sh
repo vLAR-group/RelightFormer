@@ -7,13 +7,13 @@ BLENDER_PATH=""
 SPLITS="training validation testing"
 WORKERS_PER_GPU=16
 GPUS="0 1 2 3 4 5 6 7 8 9"  # 10 GPUs by default
-SKIP_EXIST="true"
-LOG_TO_WANDB="true"
+SKIP_EXIST="false"
+LOG_TO_WANDB="false"
 SEED=0
-UPLOAD="true"
+UPLOAD="false"
 DOWNLOAD="false"
 UPLOAD_RETRIES=3
-CREDENTIALS_FILE="./credentials.json"
+CREDENTIALS_FILE="" # If you would like to submit the rendered data to a remote server, provide the path to your credentials JSON file here. Otherwise, leave it empty.
 
 # ==============================================================================
 # Usage Function
