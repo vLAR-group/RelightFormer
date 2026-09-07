@@ -14,7 +14,7 @@ Welcome to the rendering pipeline for the **Laval Objaverse Dataset**. We highly
 ### 📋 Prerequisites & Setup
 
 #### 1. Laval Indoor/Outdoor Database
-Before proceeding, you must fetch the source files for the Laval Indoor/Outdoor Database and preprocess them. Please follow the specific preprocessing instructions provided in that repository's `README.md`.
+Before proceeding, you must fetch the source files for the Laval Indoor/Outdoor Database and preprocess them. Please follow the specific preprocessing instructions provided in that repository's [`README.md`](https://github.com/vLAR-group/RelightFormer/blob/main/README.md).
 
 #### 2. Blender Installation
 The dataset images are rendered using **Blender**. For exact reproducibility, we used **Blender 4.3.2 (Linux x64)**.  
@@ -32,7 +32,7 @@ pip install -U "huggingface_hub[cli]"
 ### 🚀 Reproduction Pipeline
 
 #### Step 1: Download Metadata & Configuration
-Fetch the relevant metadata and object-environment pairing information from our Hugging Face repository:
+Fetch the relevant metadata and object-environment information from our Hugging Face repository:
 
 ```bash
 mkdir -p info
