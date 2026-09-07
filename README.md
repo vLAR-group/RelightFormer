@@ -89,13 +89,11 @@ The processed illumination maps compatible with our dataset will be generated an
 
 ### Rendering
 
-For those who would like to customize the rendering schema, it is encouraged to read the instruction in `./laval-objaverse-dataset/RENDERING_INSTRUCTION.md/`
+For those who would like to customize the rendering schema, it is encouraged to read the instruction in `./laval-objaverse-dataset/RENDERING_INSTRUCTION.md`
 
 ## Code
 
-**Code coming soon!** Stay tuned for updates.
-
-
+**Code is coming soon!** Stay tuned for updates.
 
 ## License
 

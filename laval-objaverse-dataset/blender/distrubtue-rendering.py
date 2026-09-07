@@ -58,7 +58,7 @@ class Args:
     seed: int = 0
     """Random seed"""
 
-    upload: bool = True
+    upload: bool = False
     """Upload rendered subsets to remote server after completion"""
 
     download: bool = False
