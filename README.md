@@ -36,9 +36,66 @@
 - ⚡ **Perfomant Inference**: Expeditious execution on modern GPUs
 - 🎨 **Competitive Quality**: Photorealistic relighting results
 
-## 📦 Dataset & Code
+## Environment Setup
 
-**Code and dataset coming soon!** Stay tuned for updates.
+Comming Soon.
+
+## 📦 Dataset
+
+We provide the **Laval-Objaverse Dataset**, which comprises **90,545 high-quality 3D assets** from Objaverse and **39,008 diverse illumination conditions** from the Laval Indoor and Outdoor HDR datasets. Each render includes synchronized multi-view images, depth maps, and complete lighting metadata.
+
+### 📥 Downloading the Rendering Results
+
+To download the dataset, run the provided script. The results will be saved directly into the `./laval-objaverse-dataset/` directory.
+
+```bash
+chmod +x ./laval-objaverse-dataset/download.sh
+
+# Download the testing split (default)
+./laval-objaverse-dataset/download.sh testing
+
+# Alternatively, download other splits:
+# ./laval-objaverse-dataset/download.sh training   # for the training set
+# ./laval-objaverse-dataset/download.sh validation # for the validation set
+# ./laval-objaverse-dataset/download.sh all        # for all splits (training + validation + testing)
+```
+
+### 💡 Obtaining Illumination Maps
+
+Due to licensing restrictions, we cannot directly distribute the raw illumination maps. To access the Laval Indoor and Outdoor HDR databases, please follow these steps:
+
+1. Visit the [Laval HDR Database project page](http://hdrdb.com/).
+2. Select both the **Laval Indoor HDR database** and **Laval Outdoor HDR database**.
+3. Sign the End User License Agreement (EULA) and contact Jean-François Lalonde via the provided email.
+4. You will promptly receive a download link for the source archives, namely:
+   - `IndoorHDRDatasetReexposedNoRedDotsNoInpaintingOct18.tar`
+   - `outdoorPanosExr.tgz`
+
+Once downloaded, place these two files in the `./laval-objaverse-dataset/laval/src/` directory and extract them using the following commands:
+
+```bash
+# Extract Indoor dataset
+tar -xvf ./laval-objaverse-dataset/laval/src/IndoorHDRDatasetReexposedNoRedDotsNoInpaintingOct18.tar -C ./laval/src/Indoor
+
+# Extract Outdoor dataset (note: use -xzvf for .tgz files)
+tar -xzvf ./laval-objaverse-dataset/laval/src/outdoorPanosExr.tgz -C ./laval/src/Outdoor
+```
+
+Finally, run the preprocessing script:
+```bash
+python ./laval-objaverse-dataset/scripts/process_exr.py
+```
+The processed illumination maps compatible with our dataset will be generated and saved in `./laval-objaverse-dataset/laval/preprocessed/`.
+
+### Rendering
+
+For those who would like to customize the rendering schema, it is encouraged to read the instruction in `./laval-objaverse-dataset/RENDERING_INSTRUCTION.md/`
+
+## Code
+
+**Code coming soon!** Stay tuned for updates.
+
+
 
 ## License
 
