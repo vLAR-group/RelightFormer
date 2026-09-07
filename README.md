@@ -89,7 +89,7 @@ The processed illumination maps compatible with our dataset will be generated an
 
 ### Rendering
 
-For those who would like to customize the rendering schema, it is encouraged to read the instruction in `./laval-objaverse-dataset/RENDERING_INSTRUCTION.md`
+For those who would like to customize the rendering schema, it is encouraged to read the instruction in [`./laval-objaverse-dataset/RENDERING_INSTRUCTION.md`](https://github.com/vLAR-group/RelightFormer/blob/main/laval-objaverse-dataset/RENDERING_INSTRUCTION.md)
 
 ## Code
 
