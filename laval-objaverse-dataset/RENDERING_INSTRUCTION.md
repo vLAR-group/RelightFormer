@@ -40,12 +40,11 @@ hf download vLAR/LavalObjaverseDataset "info/*" --local-dir ./info
 ```
 
 #### Step 2: Launch the Rendering Process
-Once the prerequisites are met and the environment is configured, launch the automated rendering pipeline by running:
+Once the prerequisites are met and the environment is configured, launch the automated rendering pipeline by running in default setting (10 GPUs, 16 workers per GPU, all splits):
 
 ```bash
 bash ./blender/render.sh --blender path/to/your/blender
 ```
-which run with default setting (10 GPUs, 16 workers per GPU, all splits)
 
 If you would like to render solely the testing split with 2 specific GPUs (e.g. GPU-0, GPU-1), with 8 worker each:
 
