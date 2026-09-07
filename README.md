@@ -49,15 +49,15 @@ We provide the **Laval-Objaverse Dataset**, which comprises **90,545 high-qualit
 To download the dataset, run the provided script. The results will be saved directly into the `./laval-objaverse-dataset/` directory.
 
 ```bash
-chmod +x ./laval-objaverse-dataset/download.sh
-
 # Download the testing split (default)
-./laval-objaverse-dataset/download.sh testing
-
-# Alternatively, download other splits:
-# ./laval-objaverse-dataset/download.sh training   # for the training set
-# ./laval-objaverse-dataset/download.sh validation # for the validation set
-# ./laval-objaverse-dataset/download.sh all        # for all splits (training + validation + testing)
+bash ./laval-objaverse-dataset/download.sh testing
+```
+Alternatively, download other splits:
+```
+bash ./laval-objaverse-dataset/download.sh training   # for the training set
+bash ./laval-objaverse-dataset/download.sh training subset_5 # for the subset 5 of training set
+bash ./laval-objaverse-dataset/download.sh validation # for the validation set
+bash ./laval-objaverse-dataset/download.sh all        # for all splits (training + validation + testing)
 ```
 
 ### 💡 Obtaining Illumination Maps
