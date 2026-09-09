@@ -67,7 +67,7 @@ class RelightFormerPipeline(BasePipeline):
     
     @classmethod
     def from_pretrained(cls, 
-                        pretrained_model_name_or_path: str = "vLAR/LavalObjaverseDataset",
+                        pretrained_model_name_or_path: str = "vLAR/RelightFormer",
                         revision: str = "main",
                         device='cuda', 
                         torch_dtype=torch.float16,
@@ -78,7 +78,7 @@ class RelightFormerPipeline(BasePipeline):
         
         Args:
             pretrained_model_name_or_path: The Hugging Face repo ID or a local directory path. 
-                                           Defaults to "vLAR/LavalObjaverseDataset".
+                                           Defaults to "vLAR/RelightFormer".
             revision: Specific model revision to download (only used for HF Hub).
             device: Device to load the model on.
             torch_dtype: Data type for the model.
@@ -86,13 +86,13 @@ class RelightFormerPipeline(BasePipeline):
             revision: Specific model revision to download (only used for HF Hub).
         """
         
-        dit_filename = "model.safetensors"
+        dit_filename = f"{revision}-model.safetensors"
         vae_filename = "Wan2.1_VAE.pth"
         
         # Check if the provided path is a local directory
         if os.path.isdir(pretrained_model_name_or_path):
-            dit_path = os.path.join(pretrained_model_name_or_path, revision, dit_filename)
-            vae_path = os.path.join(pretrained_model_name_or_path, "vae", vae_filename)
+            dit_path = os.path.join(pretrained_model_name_or_path, dit_filename)
+            vae_path = os.path.join(pretrained_model_name_or_path, vae_filename)
             
             if not os.path.exists(dit_path):
                 raise FileNotFoundError(f"DIT weights not found at {dit_path}")

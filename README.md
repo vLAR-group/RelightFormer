@@ -5,6 +5,7 @@
   </p>
   <p align="center">
     <a href="https://huggingface.co/datasets/vLAR/LavalObjaverseDataset"><img src="https://img.shields.io/badge/🤗-Dataset-yellow" alt="Dataset"></a>
+    <a href="https://huggingface.co/vLAR/RelightFormer/tree/main"><img src="https://img.shields.io/badge/🤗-Dataset-yellow" alt="Model"></a>
     <a href="#license"><img src="https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg" alt="License"></a>
   </p>
 </p>
@@ -112,7 +113,7 @@ You can also run inference and evaluation on the Laval-Objaverse Dataset via the
 **Single GPU:**
 ```bash
 python inference.py \
-    --from_pretrained vLAR/LavalObjaverseDataset \
+    --from_pretrained vLAR/RelightFormer \
     --revision main \
     --dataset_path ./laval-objaverse-dataset \
     --output_dir ./output \
@@ -125,7 +126,7 @@ python inference.py \
 **Multi-GPU (Distributed):**
 ```bash
 accelerate launch --num_processes=4 inference.py \
-    --from_pretrained vLAR/LavalObjaverseDataset \
+    --from_pretrained vLAR/RelightFormer \
     --revision main \
     --dataset_path ./laval-objaverse-dataset \
     --output_dir ./output/my_eval \
