@@ -1,0 +1,73 @@
+# ==========================================
+# Dependencies & Packages
+# ==========================================
+node_modules/
+/jspm_packages/
+/web_modules/
+.pnp/
+.pnp.js
+
+# ==========================================
+# Environment Variables & Secrets (CRITICAL)
+# ==========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# ==========================================
+# Build Outputs & Distribution
+# ==========================================
+dist/
+build/
+out/
+.next/
+.vuepress/dist
+.cache/
+*.exe
+*.dll
+*.so
+
+# ==========================================
+# Logs & Runtime Data
+# ==========================================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# ==========================================
+# IDEs and Code Editors
+# ==========================================
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# ==========================================
+# Operating System Files
+# ==========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Ehthumbs.db
+Desktop.ini
