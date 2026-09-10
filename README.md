@@ -117,7 +117,7 @@ pipe = RelightFormerPipeline.from_pretrained(
 )
 ```
 
-You can also run inference and evaluation on the Laval-Objaverse Dataset via the command line:
+You can also run inference and evaluation on the Laval Objaverse Dataset via the command line:
 
 **Single GPU:**
 ```bash
