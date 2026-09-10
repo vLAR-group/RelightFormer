@@ -107,7 +107,7 @@ You can load and call the model via Python:
 ```python
 from diffsynth import RelightFormerPipeline
 
-from_pretrained = 'vLAR/LavalObjaverseDataset'
+from_pretrained = 'vLAR/RelightFormer'
 revision = 'main'  # Use 'post' if you would like to load RelightFormer-Post
 
 pipe = RelightFormerPipeline.from_pretrained(
