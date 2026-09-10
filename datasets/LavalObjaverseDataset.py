@@ -172,7 +172,7 @@ class LavalObjaverseDataset(Dataset):
         def check_png_exists(r_path: str, v_name: str, l_name: str) -> Optional[str]:
             v_clean = v_name.split('.')[0]
             l_clean = l_name.replace("/", "_").split('.')[0]
-            image_file_name = f"{v_clean}&{l_clean}_image.png"
+            image_file_name = f"{v_clean}-{l_clean}_image.png"
             
             full_path = os.path.join(r_path, image_file_name)
             if not os.path.exists(full_path):
