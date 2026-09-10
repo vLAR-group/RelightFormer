@@ -74,7 +74,8 @@ bash ./laval-objaverse-dataset/download.sh all           # All splits (training 
 Due to licensing restrictions, we cannot directly distribute the raw illumination maps. To access the Laval Indoor and Outdoor HDR databases, please follow these steps:
 
 1. Visit the [Laval HDR Database project page](http://hdrdb.com/).
-2. Select both the **Laval Indoor HDR database** and the **Laval Outdoor HDR database**.3. Sign the End User License Agreement (EULA) and contact Jean-François Lalonde via the provided email.
+2. Select both the **Laval Indoor HDR database** and the **Laval Outdoor HDR database**.
+3. Sign the End User License Agreement (EULA) and contact Jean-François Lalonde via the provided email.
 4. You will receive a download link for the source archives, namely:
    - `IndoorHDRDatasetReexposedNoRedDotsNoInpaintingOct18.tar`
    - `outdoorPanosExr.tgz`
