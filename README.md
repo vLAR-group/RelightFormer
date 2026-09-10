@@ -50,7 +50,7 @@ conda activate relightformer
 
 ## 📦 Dataset
 
-We introduce the **Laval-Objaverse Dataset (LOD)**, which comprises **90,545 high-quality 3D assets** from Objaverse and **39,008 diverse illumination conditions** derived from the Laval Indoor and Outdoor HDR datasets. Each render includes synchronized multi-view images, depth maps, and complete lighting metadata.
+We introduce the **Laval-Objaverse Dataset (LOD)**, which comprises **90,545 high-quality 3D assets** from Objaverse and **39,008 diverse illumination conditions** derived from the Laval Indoor and Outdoor HDR datasets. Each render includes synchronized multi-view images, depth maps, and relevant metadata.
 
 ### 📥 Downloading the Rendering Results
 
