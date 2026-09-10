@@ -401,7 +401,6 @@ class DiTBlock(nn.Module):
         self.self_attn = SelfAttention(dim, num_heads, eps)
         self.norm1 = nn.LayerNorm(dim, eps=eps, elementwise_affine=False)
         self.norm2 = nn.LayerNorm(dim, eps=eps, elementwise_affine=False)
-        # self.norm3 = nn.LayerNorm(dim, eps=eps, elementwise_affine=False) # never use
 
         self.ffn = nn.Sequential(
             nn.Linear(dim, ffn_dim), 
