@@ -37,7 +37,15 @@
 
 ## 🛠️ Environment Setup
 
-*Coming Soon.* (Instructions for setting up the Python environment and installing dependencies will be provided here).
+```bash
+# clone this repo
+git clone git@github.com:vLAR-group/RelightFormer.git
+cd RelightFormer
+
+# create and activate conda environment
+conda env create -f environment.yaml
+conda activate relightformer
+```
 
 ## 📦 Dataset
 

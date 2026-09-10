@@ -44,7 +44,7 @@ validation_steps: 10000 # When to go to log_validation
 tracker_project_name: "RelightFormer"
 
 # model
-rope: "PRoPE" # wan wan-no-frame prope gta cape so4
+rope: "PRoPE"
 resolution: 256
 
 # ablation

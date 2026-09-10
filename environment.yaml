@@ -1,0 +1,51 @@
+name: RelightFormer-Test
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  # Core Python & System
+  - python=3.11
+  - numpy
+  - pandas
+  - openpyxl
+  - pyyaml
+  - pip
+  
+  # Pip dependencies (Deep Learning, Vision, and Relighting specific)
+  - pip:
+      # Core DL Framework
+      - torch==2.10.0       # Note: Verify this version (current stable is ~2.5.x)
+      - torchvision==0.25.0
+      - xformers==0.0.35
+      - triton==3.6.0
+      
+      # Hugging Face & Generative
+      - transformers==5.14.1 # Note: Verify this version (current stable is ~4.x)
+      - diffusers==0.39.0
+      - accelerate==1.14.0
+      - huggingface-hub==1.24.0
+      - safetensors==0.8.0
+      - tokenizers==0.22.2
+      - sentencepiece==0.2.2
+      
+      # Vision & 3D/Relighting Utilities
+      - opencv-python==5.0.0.93
+      - openexr==3.4.13
+      - imageio==2.37.4
+      - imagecodecs==2026.3.6
+      - kornia==0.8.3
+      - kornia-rs==0.1.14
+      - einops==0.8.2
+      
+      # Optimization & Quantization
+      - bitsandbytes==0.49.2
+      
+      # Utilities & Logging
+      - wandb==0.28.1
+      - tqdm==4.69.0
+      - rich==15.0.0
+      - modelscope==1.38.1
+      - modelscope-hub==0.1.8
+      - kiui==0.2.13
