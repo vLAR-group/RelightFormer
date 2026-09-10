@@ -21,6 +21,7 @@ dependencies:
       - torchmetrics
       - xformers==0.0.35
       - triton==3.6.0
+      - modelscope
       
       # Hugging Face & Generative
       - transformers==5.14.1 # Note: Verify this version (current stable is ~4.x)
