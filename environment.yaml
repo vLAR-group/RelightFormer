@@ -1,4 +1,4 @@
-name: RelightFormer-Test
+name: relightformer
 channels:
   - pytorch
   - nvidia
