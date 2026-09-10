@@ -1,11 +1,10 @@
 import json
 import logging
 import os
-import shutil
 import warnings
-from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional
+import argparse
 
 import numpy as np
 import torch
@@ -13,13 +12,7 @@ import torch.nn.functional as F
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
-from accelerate.utils import (
-    DistributedDataParallelKwargs,
-    InitProcessGroupKwargs,
-    ProjectConfiguration,
-    set_seed,
-)
-from diffusers.utils import is_wandb_available
+from accelerate.utils import set_seed
 from tqdm.auto import tqdm
 from torchvision.io import ImageReadMode, read_image
 from torchvision.utils import save_image
@@ -27,7 +20,6 @@ from torchvision.utils import save_image
 from diffsynth import RelightFormerPipeline
 from datasets.LavalObjaverseDataset import LavalObjaverseEvalDataset as LODEvalDataset
 from utils.metrics import MetricCalculator, resize_5d
-from utils.args import read_yaml_to_namespce
 
 # -----------------------------------------------------------------------------
 # Environment & Warning Configuration
@@ -37,28 +29,13 @@ os.environ['NCCL_P2P_DISABLE'] = '1'
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 os.environ['WANDB_CONFIG_DIR'] = f"/tmp/.config-{os.environ.get('USER', 'user')}"
 
-NCCL_TIMEOUT = 360000
-
 # Suppress known benign warnings
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
-warnings.filterwarnings("ignore", message="cc_projection/diffusion_pytorch_model.safetensors not found")
-warnings.filterwarnings("ignore", message="The config attributes {'cc_projection':.*")
-warnings.filterwarnings("ignore", message=".*is_pinned.*device.*", category=DeprecationWarning, module="torch")
+warnings.filterwarnings("ignore", message=".*not found")
+warnings.filterwarnings("ignore", message="The config attributes.*")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 logger = get_logger(__name__)
-
-def generate_sequence(N, R):
-    visited = [False] * (N + 1)
-    result = []
-    
-    for start in range(R):
-        for current in range(start, N + 1, R):
-            if not visited[current]:
-                visited[current] = True
-                result.append(current)
-                
-    return result
 
 
 def load_pred_image(
@@ -83,108 +60,81 @@ def load_pred_image(
 
 
 # -----------------------------------------------------------------------------
-# Validation & Logging
+# Inference & Evaluation Loop
 # -----------------------------------------------------------------------------
 @torch.no_grad()
-def log_validation(
-    validation_dataloader: torch.utils.data.DataLoader,
+def run_inference(
+    dataloader: torch.utils.data.DataLoader,
     pipe: RelightFormerPipeline,
     args: Any,
     accelerator: Accelerator,
     weight_dtype: torch.dtype,
-    split: str = "testing",
-    cur_step: int = 0,
 ) -> Dict[str, Any]:
     
-    cfg = args.config
     device = accelerator.device
     proc_id = accelerator.process_index
-    logger.info(f"🚀 Running {split} validation at step {cur_step} (Process {proc_id})...")
+    is_main = accelerator.is_main_process
+    
+    logger.info(f"🚀 Starting inference (Process {proc_id})...")
     metric_calculator = MetricCalculator(device=device, depth_tolerance=0.1)
     res_json_path = (Path(args.output_dir) / f"results_rank_{proc_id}.json").resolve()
     
     # 1. Resume logic
-    if getattr(args, "skip_exist", False) and res_json_path.exists():
+    evaluation_results = {"average": {}, "data_pair": {}}
+    if args.skip_exist and res_json_path.exists():
         with open(res_json_path, 'r') as f:
             evaluation_results = json.load(f)
-        # Ensure data_pair is a dict for O(1) lookups
         if isinstance(evaluation_results.get("data_pair"), list):
             evaluation_results["data_pair"] = {str(item["sample_idx"]): item for item in evaluation_results["data_pair"]}
         logger.info(f"📦 Resumed from {res_json_path}, already processed {len(evaluation_results['data_pair'])} samples.")
-    else:
-        evaluation_results = {"average": {}, "data_pair": {}}
 
-    # 2. Initialize Pipeline
-    # 3. Load metadata (optional, for saving paths)
+    # 2. Load metadata (optional, for saving paths)
     data_pairs = None
-    if getattr(args, "pair_info", None) and os.path.isfile(args.pair_info):
+    if args.pair_info and os.path.isfile(args.pair_info):
         try:
             with open(args.pair_info, 'r') as f:
                 data_pairs = json.load(f)
         except (json.JSONDecodeError, IOError) as e:
             logger.warning(f"Failed to load pair info from {args.pair_info}: {e}")
 
-    # 4. Evaluation Loop
-    bar = tqdm(enumerate(validation_dataloader), desc=f"{split}-Rank{proc_id}", total=len(validation_dataloader), disable=not accelerator.is_local_main_process)
+    inference_size = (256, 256)
+    
+    # 3. Evaluation Loop
+    bar = tqdm(enumerate(dataloader), desc=f"Inference-Rank{proc_id}", total=len(dataloader), disable=not is_main)
     
     for valid_step, batch in bar:
         if batch is None:
             continue
 
-        inference_size = (cfg.resolution, cfg.resolution)
+        # Save GT and Reference images once (if requested)
+        if args.save_gt or args.save_ref:
+            source_to_save = batch["source_images"]
+            target_to_save = batch["target_images"]
+            if source_to_save.shape[-2:] != inference_size:
+                source_to_save = resize_5d(source_to_save, size=inference_size)
+            if target_to_save.shape[-2:] != inference_size:
+                target_to_save = resize_5d(target_to_save, size=inference_size)
 
-        # Always save GT and reference before resume/skip filtering. This also
-        # covers samples already recorded in JSON or backed by cached predictions.
-        source_to_save = batch["source_images"]
-        target_to_save = batch["target_images"]
-        if source_to_save.shape[-2:] != inference_size:
-            source_to_save = resize_5d(source_to_save, size=inference_size)
-        if target_to_save.shape[-2:] != inference_size:
-            target_to_save = resize_5d(target_to_save, size=inference_size)
+            for batch_pos, sample_idx_value in enumerate(batch["idx"].tolist()):
+                sample_idx = int(sample_idx_value)
+                meta = data_pairs[sample_idx] if isinstance(data_pairs, list) and 0 <= sample_idx < len(data_pairs) else (data_pairs.get(str(sample_idx)) if isinstance(data_pairs, dict) else None)
+                subfolder_name = str(batch["meta"][batch_pos]) if "meta" in batch else str(sample_idx)
+                
+                for v in range(target_to_save.shape[1]):
+                    view_name = meta["view"][v].split(".")[0] if meta and "view" in meta else f"view_{v}"
+                    out_dir = (Path(args.output_dir) / subfolder_name / view_name).resolve()
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    if args.save_gt:
+                        save_image(target_to_save[batch_pos, v], out_dir / "gt_relight.png", normalize=False)
+                    if args.save_ref:
+                        save_image(source_to_save[batch_pos, v], out_dir / "ref_relight.png", normalize=False)
+                        save_image(batch['source_mask'][batch_pos, v], out_dir / "mask.png", normalize=False)
 
-        for batch_pos, sample_idx_value in enumerate(batch["idx"].tolist()):
-            sample_idx = int(sample_idx_value)
-            if isinstance(data_pairs, list):
-                meta = data_pairs[sample_idx] if 0 <= sample_idx < len(data_pairs) else None
-            else:
-                meta = data_pairs.get(str(sample_idx)) if isinstance(data_pairs, dict) else None
-
-            subfolder_name = (
-                str(batch["meta"][batch_pos]) if "meta" in batch else str(sample_idx)
-            )
-            num_save_views = target_to_save.shape[1]
-
-            for v in range(num_save_views):
-                view_name = (
-                    meta["view"][v].split(".")[0]
-                    if meta and "view" in meta
-                    else f"view_{v}"
-                )
-                out_dir = (
-                    Path(args.output_dir) / subfolder_name / view_name
-                ).resolve()
-                out_dir.mkdir(parents=True, exist_ok=True)
-                save_image(
-                    target_to_save[batch_pos, v],
-                    out_dir / "gt_relight.png",
-                    normalize=False,
-                )
-                save_image(
-                    source_to_save[batch_pos, v],
-                    out_dir / "ref_relight.png",
-                    normalize=False,
-                )
-
-                save_image(
-                    batch['source_mask'][batch_pos, v],
-                    out_dir / "mask.png",
-                    normalize=False,
-                )
-
-        # Filter out already processed samples if skip_exist is True
+        # Filter out already processed samples
         all_indices = batch['idx'].tolist()
         keep_mask = [
-            not (getattr(args, "skip_exist", False) and str(idx_val) in evaluation_results["data_pair"])
+            not (args.skip_exist and str(idx_val) in evaluation_results["data_pair"])
             for idx_val in all_indices
         ]
         
@@ -205,7 +155,8 @@ def log_validation(
         target_view = batch["target_view"][keep_mask_tensor].to(device, dtype=weight_dtype)
         source_Ks = batch["source_Ks"][keep_mask_tensor].to(device, dtype=weight_dtype)
         target_Ks = batch["target_Ks"][keep_mask_tensor].to(device, dtype=weight_dtype)
-        # Keep pipeline inputs, cached predictions, labels, and masks at one size.
+
+        # Resize inputs if necessary
         if source.shape[-2:] != inference_size:
             source = resize_5d(source, size=inference_size)
             lighting = resize_5d(lighting, size=inference_size)
@@ -214,47 +165,28 @@ def log_validation(
         if mask.shape[-2:] != inference_size:
             mask = resize_5d(mask, size=inference_size)
 
-        # Keep the original batch positions so metadata paths remain correct
-        # after filtering samples that already exist in results_rank_*.json.
-        kept_batch_positions = torch.nonzero(
-            keep_mask_tensor, as_tuple=False
-        ).flatten().tolist()
-
+        kept_batch_positions = torch.nonzero(keep_mask_tensor, as_tuple=False).flatten().tolist()
         num_views = target.shape[1]
+        
         sample_metas = []
         sample_output_dirs = []
 
-        # Resolve every expected pred_relight.png path before inference.
+        # Resolve paths
         for b in range(B):
             sample_idx = int(idx[b].item())
-
-            if isinstance(data_pairs, list):
-                meta = data_pairs[sample_idx] if 0 <= sample_idx < len(data_pairs) else None
-            else:
-                meta = data_pairs.get(str(sample_idx)) if isinstance(data_pairs, dict) else None
-
+            meta = data_pairs[sample_idx] if isinstance(data_pairs, list) and 0 <= sample_idx < len(data_pairs) else (data_pairs.get(str(sample_idx)) if isinstance(data_pairs, dict) else None)
             original_batch_pos = kept_batch_positions[b]
-            if "meta" in batch:
-                subfolder_name = str(batch["meta"][original_batch_pos])
-            else:
-                subfolder_name = str(sample_idx)
+            subfolder_name = str(batch["meta"][original_batch_pos]) if "meta" in batch else str(sample_idx)
 
             output_dirs = []
             for v in range(num_views):
-                view_name = (
-                    meta["view"][v].split(".")[0]
-                    if meta and "view" in meta
-                    else f"view_{v}"
-                )
-                output_dirs.append(
-                    (Path(args.output_dir) / subfolder_name / view_name).resolve()
-                )
+                view_name = meta["view"][v].split(".")[0] if meta and "view" in meta else f"view_{v}"
+                output_dirs.append((Path(args.output_dir) / subfolder_name / view_name).resolve())
 
             sample_metas.append(meta)
             sample_output_dirs.append(output_dirs)
 
-        # 5. Load existing predictions and infer only missing samples.
-        skip_exist = getattr(args, "skip_exist", False)
+        # 4. Load existing predictions or run inference
         output_by_sample = [None] * B
         loaded_from_disk = [False] * B
         infer_positions = []
@@ -262,32 +194,18 @@ def log_validation(
         for b, output_dirs in enumerate(sample_output_dirs):
             pred_paths = [out_dir / "pred_relight.png" for out_dir in output_dirs]
 
-            # A multi-view sample is reusable only when every expected view exists.
-            if skip_exist and all(pred_path.is_file() for pred_path in pred_paths):
+            if args.skip_exist and all(pred_path.is_file() for pred_path in pred_paths):
                 output_by_sample[b] = torch.stack(
-                    [
-                        load_pred_image(
-                            pred_path,
-                            target_size=inference_size,
-                            device=device,
-                            dtype=weight_dtype,
-                        )
-                        for pred_path in pred_paths
-                    ],
+                    [load_pred_image(pred_path, target_size=inference_size, device=device, dtype=weight_dtype) for pred_path in pred_paths],
                     dim=0,
                 )
                 loaded_from_disk[b] = True
-                logger.info(
-                    f"Loaded existing pred_relight.png files for sample "
-                    f"{int(idx[b].item())}; pipeline inference skipped."
-                )
             else:
                 infer_positions.append(b)
 
+        # Run Model Inference
         if infer_positions:
-            infer_index = torch.tensor(
-                infer_positions, device=device, dtype=torch.long
-            )
+            infer_index = torch.tensor(infer_positions, device=device, dtype=torch.long)
 
             with torch.autocast("cuda", dtype=weight_dtype):
                 generated_output = pipe(
@@ -299,7 +217,7 @@ def log_validation(
                     target_Ks=target_Ks[infer_index],
                     cfg_scale=args.guidance_scale,
                     denoising_strength=args.denoising_strength,
-                    seed=cfg.seed,
+                    seed=args.seed,
                 )
 
             for generated_pos, batch_pos in enumerate(infer_positions):
@@ -307,64 +225,43 @@ def log_validation(
 
         output = torch.stack(output_by_sample, dim=0)
 
-        # 6. Metric Calculation
-        res = metric_calculator(
-                outputs=output, 
-                labels=target, 
-                mask_gt=mask, 
-                average=False)
-        
-        # Unpack 11 metrics
-        (b_psnr, b_spsnr, b_ssim, b_lpips, 
-         b_psnr_mask, b_spsnr_mask, b_ssim_mask, b_lpips_mask,
-         b_d_acc, b_d_mse, b_m_iou) = res
+        # 5. Metric Calculation
+        res = metric_calculator(outputs=output, labels=target, mask_gt=mask, average=False)
+        (b_psnr, b_spsnr, b_ssim, b_lpips, b_psnr_mask, b_spsnr_mask, b_ssim_mask, b_lpips_mask, b_d_acc, b_d_mse, b_m_iou) = res
 
-        # 7. Per-sample Storage & Logging
+        # 6. Per-sample Storage & Logging
         for b in range(B):
             sample_idx = int(idx[b].item())
-            
-            # Metadata and output directories were resolved before inference.
             meta = sample_metas[b]
             num_views = output.shape[1]
 
             current_eval = {
                 "sample_idx": sample_idx,
                 "object": meta.get("object") if meta else None,
-                "psnr": float(b_psnr[b]), 
-                "spsnr": float(b_spsnr[b]), 
-                "ssim": float(b_ssim[b]), 
-                "lpips": float(b_lpips[b]),
+                "psnr": float(b_psnr[b]), "spsnr": float(b_spsnr[b]), "ssim": float(b_ssim[b]), "lpips": float(b_lpips[b]),
                 "psnr_mask": float(b_psnr_mask[b]) if b_psnr_mask[b] is not None else None,
                 "spsnr_mask": float(b_spsnr_mask[b]) if b_spsnr_mask[b] is not None else None,
                 "ssim_mask": float(b_ssim_mask[b]) if b_ssim_mask[b] is not None else None,
                 "lpips_mask": float(b_lpips_mask[b]) if b_lpips_mask[b] is not None else None,
-                "pred_image": [], 
-                "gt_image": []
+                "pred_image": [], "gt_image": []
             }
 
-            # Save generated files per view. Existing predictions remain untouched.
             for v in range(num_views):
                 out_dir = sample_output_dirs[b][v]
                 out_dir.mkdir(parents=True, exist_ok=True)
-
                 pred_path = out_dir / "pred_relight.png"
+                
                 if not loaded_from_disk[b]:
                     save_image(output[b, v], pred_path, normalize=False)
                 current_eval["pred_image"].append(str(pred_path))
                 
-                # GT and reference were saved before skip/resume filtering.
-                # save_image(lighting[b, 0], out_dir / "target_lighting.png", normalize=False)
-
                 if 'target_frame_path' in batch:
-                    if args.dataset in ["Stanford-ORB", "Stanford-ORBGS"]:
-                        current_eval["gt_image"].append(str(batch['target_frame_path'][v][b]))
-                    else:
-                        current_eval["gt_image"].append(str(batch['target_frame_path'][keep_mask_tensor][v][b]))
+                    current_eval["gt_image"].append(str(batch['target_frame_path'][keep_mask_tensor][v][b]))
 
-            # 8. Real-time Aggregation
             evaluation_results["data_pair"][str(sample_idx)] = current_eval
-            all_samples = list(evaluation_results["data_pair"].values())
             
+            # Real-time Aggregation
+            all_samples = list(evaluation_results["data_pair"].values())
             keys_to_avg = ["psnr", "spsnr", "ssim", "lpips", "psnr_mask", "spsnr_mask", "ssim_mask", "lpips_mask"]
             evaluation_results["average"] = {
                 k: float(np.mean([s[k] for s in all_samples if s.get(k) is not None]))
@@ -384,10 +281,9 @@ def log_validation(
         with open(res_json_path, 'w') as f:
             json.dump(evaluation_results, f, indent=4)
 
-        # Optional: Clear cache periodically to prevent OOM on long evals
         torch.cuda.empty_cache()
 
-    logger.info(f"✅ Validation Rank {proc_id} Finished. Results at {res_json_path}")
+    logger.info(f"✅ Inference Rank {proc_id} Finished. Results at {res_json_path}")
     return evaluation_results
 
 
@@ -395,116 +291,124 @@ def log_validation(
 # Main Execution
 # -----------------------------------------------------------------------------
 def main(args: Any):
-    accelerator_project_config = ProjectConfiguration(project_dir=args.output_dir, logging_dir=logging_dir)
-    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=False)
-    init_kwargs = InitProcessGroupKwargs(backend="nccl", timeout= timedelta(seconds=NCCL_TIMEOUT))
+    # 1. Accelerator Setup (Inference Optimized)
+    accelerator = Accelerator(mixed_precision=args.mixed_precision)
     
-    accelerator = Accelerator(
-        gradient_accumulation_steps=cfg.gradient_accumulation_steps,
-        mixed_precision=cfg.mixed_precision,
-        log_with=cfg.report_to,
-        project_config=accelerator_project_config,
-        kwargs_handlers=[ddp_kwargs, init_kwargs],
-    )
-
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
-    logger.info(accelerator.state, main_process_only=False)
     
-    if accelerator.is_local_main_process:
+    if accelerator.is_main_process:
         transformers.utils.logging.set_verbosity_warning()
     else:
         transformers.utils.logging.set_verbosity_error()
 
-    if cfg.seed is not None:
-        set_seed(cfg.seed)
+    if args.seed is not None:
+        set_seed(args.seed)
 
-    # 1. Model Initialization
-    pipe = RelightFormerPipeline.from_pretrained(args.from_pretrained, revision=cfg.revision, torch_dtype=getattr(torch, cfg.torch_dtype))
+    # 2. Model Initialization
+    logger.info(f"Loading model from: {args.from_pretrained}")
+    pipe = RelightFormerPipeline.from_pretrained(
+        args.from_pretrained, 
+        revision=args.revision, 
+        torch_dtype=getattr(torch, args.torch_dtype)
+    )
     pipe.to(accelerator.device)
-    pipe.requires_grad_(False)
     pipe.eval()
-    pipe.load_prompt_dict(path=cfg.prompt_path)
+    
+    # Optional: Load prompt dict if your pipeline requires it
+    if hasattr(pipe, 'load_prompt_dict') and args.prompt_path:
+        try:
+            pipe.load_prompt_dict(path=args.prompt_path)
+        except Exception as e:
+            logger.warning(f"Could not load prompt dict: {e}")
 
-    def print_model_info(model: torch.nn.Module):
+    def print_model_info(model: torch.nn.Module, name: str):
         if accelerator.is_main_process and model is not None:
-            logger.info("=" * 40)
-            logger.info(f"Model: {type(model).__name__}")
-            logger.info(f"Learnable params (M): {sum(p.numel() for p in model.parameters() if p.requires_grad) / 1e6:.2f}")
-            logger.info(f"Non-learnable params (M): {sum(p.numel() for p in model.parameters() if not p.requires_grad) / 1e6:.2f}")
-            logger.info(f"Total params (M): {sum(p.numel() for p in model.parameters()) / 1e6:.2f}")
-            logger.info(f"Model size (MB): {sum(p.numel() * p.element_size() for p in model.parameters()) / 1024 / 1024:.2f}")
-            logger.info("=" * 40)
+            total_params = sum(p.numel() for p in model.parameters()) / 1e6
+            logger.info(f"✅ {name} Loaded. Total params: {total_params:.2f}M")
 
-    print_model_info(pipe.dit)
-    print_model_info(pipe.vae)
-    # 2. Dataset Preparation
+    print_model_info(pipe.dit, "DIT")
+    print_model_info(pipe.vae, "VAE")
+
+    # 3. Dataset Preparation
     dataset = LODEvalDataset(
         args.dataset_path,
         args.pair_info,
-        resolution=(512, 512)
+        resolution=(args.resolution, args.resolution)
     )
 
     dataloader = torch.utils.data.DataLoader(
         dataset,
         shuffle=False,
         batch_size=args.batch_size,
-        num_workers=0 # Increased from 0 for better performance
+        num_workers=args.num_workers,
+        pin_memory=True
     )
     
-    pipe.dit, dataloader = accelerator.prepare(pipe.dit, dataloader)
+    # Only prepare dataloader for distributed sampling, keep model as-is for pure inference
+    dataloader = accelerator.prepare(dataloader)
 
-    # 3. Precision Setup
+    # 4. Precision Setup
     weight_dtype = torch.float32
-    if accelerator.mixed_precision == "fp16":
+    if args.mixed_precision == "fp16":
         weight_dtype = torch.float16
-    elif accelerator.mixed_precision == "bf16":
+    elif args.mixed_precision == "bf16":
         weight_dtype = torch.bfloat16
 
     if pipe.vae is not None:
         pipe.vae.to(dtype=torch.float16) # VAE is typically safe at fp16 for inference
 
-    # 5. Run Evaluation
-    _ = log_validation(
-        validation_dataloader=dataloader,
+    # 5. Run Inference
+    run_inference(
+        dataloader=dataloader,
         pipe=pipe,
         args=args,
         accelerator=accelerator,
         weight_dtype=weight_dtype,
-        cur_step=0
     )
+
 
 # -----------------------------------------------------------------------------
 # Entry Point
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    import argparse
-
-    torch.manual_seed(6)
-    np.random.seed(66)
-
-    parser = argparse.ArgumentParser(description="RelightFormer Evaluation Script")
-    parser.add_argument("--from_pretrained", type=str, default='vLAR/LavalObjaverseDataset/checkpoints')
-    parser.add_argument("--revision", type=str, default="main", help="Specify a revision name to load from the pretrained directory.")
-    parser.add_argument("--output_dir", type=str, default='./output/')
-    parser.add_argument("--batch_size", type=int, default=1)
+    parser = argparse.ArgumentParser(description="RelightFormer Inference Script")
+    
+    # Model & Paths
+    parser.add_argument("--from_pretrained", type=str, default='vLAR/RelightFormer')
+    parser.add_argument("--revision", type=str, default="main", help="Revision name to load from the pretrained directory.")
+    parser.add_argument("--prompt_path", type=str, default=None, help="Path to prompt dictionary (optional).")
+    parser.add_argument("--output_dir", type=str, default='./output', help="Directory to save inference results and metrics.")
+    
+    # Dataset
     parser.add_argument("--dataset_path", type=str, default="./laval-objaverse-dataset")
-    parser.add_argument("--pair_info", type=str, default='./laval-objaverse-dataset/paris/16_to_16_mapping_pairs.json')
-    parser.add_argument("--skip_exist", action='store_true', help="Skip samples already present in results JSON")
-    parser.add_argument("--save_gt", action='store_true')
-    parser.add_argument("--save_ref", action='store_true')
+    parser.add_argument("--pair_info", type=str, default='./laval-objaverse-dataset/pairs/16_to_16_mapping_pairs.json')
+    parser.add_argument("--resolution", type=int, default=512)
+    parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--num_workers", type=int, default=0, help="0 is safest for complex EXR/image dataloaders.")
+    
+    # Inference Settings
+    parser.add_argument("--torch_dtype", type=str, default="bfloat16", choices=["float16", "bfloat16", "float32"])
+    parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["no", "fp16", "bf16"])
     parser.add_argument("--guidance_scale", type=float, default=2.0)
     parser.add_argument("--denoising_strength", type=float, default=1.0)
-
-    cli_args = parser.parse_args()
+    parser.add_argument("--seed", type=int, default=42)
     
-    # Load config from the pretrained directory
+    # Utilities
+    parser.add_argument("--skip_exist", action='store_true', help="Skip samples already present in results JSON and on disk.")
+    parser.add_argument("--save_gt", action='store_true', help="Save ground truth images.")
+    parser.add_argument("--save_ref", action='store_true', help="Save reference/mask images.")
 
-    # Construct clean output directory name
-    cli_args.output_dir = os.path.join(cli_args.output_dir, ckpt_str)
-    os.makedirs(cli_args.output_dir, exist_ok=True)
-
-    main(cli_args)
+    args = parser.parse_args()
+    
+    # Construct clean output directory
+    os.makedirs(args.output_dir, exist_ok=True)
+    
+    # Set global seeds
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    
+    main(args)

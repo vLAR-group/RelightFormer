@@ -4,6 +4,7 @@
     <strong>SIGGRAPH Asia 2026</strong>
   </p>
   <p align="center">
+    <a href="https://arxiv.org/abs/2609.07414"><img src="https://img.shields.io/badge/arXiv-2604.07414-b31b1b.svg" alt="arXiv"></a>
     <a href="https://huggingface.co/datasets/vLAR/LavalObjaverseDataset"><img src="https://img.shields.io/badge/🤗-Dataset-yellow" alt="Dataset"></a>
     <a href="https://huggingface.co/vLAR/RelightFormer"><img src="https://img.shields.io/badge/🤗-Model-yellow" alt="Model"></a>
     <a href="#license"><img src="https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg" alt="License"></a>
@@ -73,8 +74,7 @@ bash ./laval-objaverse-dataset/download.sh all           # All splits (training 
 Due to licensing restrictions, we cannot directly distribute the raw illumination maps. To access the Laval Indoor and Outdoor HDR databases, please follow these steps:
 
 1. Visit the [Laval HDR Database project page](http://hdrdb.com/).
-2. Select both the **Laval Indoor HDR database** and the **Laval Outdoor HDR database**.
-3. Sign the End User License Agreement (EULA) and contact Jean-François Lalonde via the provided email.
+2. Select both the **Laval Indoor HDR database** and the **Laval Outdoor HDR database**.3. Sign the End User License Agreement (EULA) and contact Jean-François Lalonde via the provided email.
 4. You will receive a download link for the source archives, namely:
    - `IndoorHDRDatasetReexposedNoRedDotsNoInpaintingOct18.tar`
    - `outdoorPanosExr.tgz`

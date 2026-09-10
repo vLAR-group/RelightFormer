@@ -74,3 +74,12 @@ pids
 Thumbs.db
 Ehthumbs.db
 Desktop.ini
+
+
+# ==========================================
+# Datasets
+# ==========================================
+laval-objaverse-dataset/pairs
+laval-objaverse-dataset/rendered
+laval-objaverse-dataset/laval
+

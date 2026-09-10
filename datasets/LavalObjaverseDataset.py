@@ -66,7 +66,7 @@ class LavalObjaverseDataset(Dataset):
         # Load objects
         if object_split == "training":
             self.objects = []
-            json_files = glob.glob(os.path.join(self.data_dir, "objaverse/info", "training_subsets/subset_*.json"))
+            json_files = glob.glob(os.path.join(self.data_dir, "info/objaverse", "training_subsets/subset_*.json"))
             for json_file in json_files:
                 subset = os.path.splitext(os.path.basename(json_file))[0]
                 if self.is_ablation and subset not in ["subset_0"]:
@@ -76,7 +76,7 @@ class LavalObjaverseDataset(Dataset):
                 for obj_uid in content:
                     self.objects.append(f"{subset}/{obj_uid}")
         else: 
-            object_info_file = os.path.join(self.data_dir, "objaverse/info", f"full_{object_split}_objects.json")
+            object_info_file = os.path.join(self.data_dir, "info/objaverse", f"full_{object_split}_objects.json")
             with open(object_info_file, 'r') as f:
                 self.objects = json.load(f)
 

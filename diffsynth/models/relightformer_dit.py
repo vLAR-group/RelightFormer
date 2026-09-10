@@ -638,6 +638,7 @@ class RelightFormerModel(ModelMixin, ConfigMixin):
             wan.num_layers,
             wan.has_image_input,
         )
+        print*()
         model.load_state_dict(wan.state_dict(), strict=False)
         model.lighting_patchifier.xavier_init()
         model.rays_embedding.siren_init()

@@ -8,9 +8,14 @@ from ..prompters import WanPrompter
 import torch, os
 from einops import rearrange
 import numpy as np
-from PIL import Imageå
-from tqdm import tqdm
+from huggingface_hub import hf_hub_download
+from PIL import Image
 from typing import Optional
+from pathlib import Path
+from accelerate import init_empty_weights
+from accelerate.utils import set_module_tensor_to_device
+from safetensors import safe_open
+from tqdm import tqdm
 
 from ..vram_management import enable_vram_management, AutoWrappedModule, AutoWrappedLinear
 from ..models.wan_video_text_encoder import T5RelativeEmbedding, T5LayerNorm
@@ -66,86 +71,186 @@ class RelightFormerPipeline(BasePipeline):
         return pipe
     
     @classmethod
-    def from_pretrained(cls, 
-                        pretrained_model_name_or_path: str = "vLAR/RelightFormer",
-                        revision: str = "main",
-                        device='cuda', 
-                        torch_dtype=torch.float16,
-                        cache_dir: Optional[str] = None,
-                        revision: Optional[str] = None):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str = "vLAR/RelightFormer",
+        revision: str = "main",
+        device: str | torch.device = "cuda",
+        torch_dtype: torch.dtype = torch.float16,
+        cache_dir: Optional[str] = None,
+        hub_revision: str = "main",
+        resolution: int = 256,
+    ):
+        """Load RelightFormer directly from its released checkpoint.
+
+        ``revision`` selects the weight file (``main-model.safetensors`` or
+        ``post-model.safetensors``). ``hub_revision`` independently selects the
+        Hugging Face Git branch/tag/commit and normally remains ``main``.
+
+        Unlike the old implementation, this method does not load the checkpoint as
+        ``wan_video_dit`` and does not call ``init_from_wan_model``. It constructs
+        the final RelightFormer architecture and streams every trained tensor from
+        the checkpoint directly into that model.
         """
-        Initialize the pipeline from a pretrained Hugging Face model repository or a local directory.
-        
-        Args:
-            pretrained_model_name_or_path: The Hugging Face repo ID or a local directory path. 
-                                           Defaults to "vLAR/RelightFormer".
-            revision: Specific model revision to download (only used for HF Hub).
-            device: Device to load the model on.
-            torch_dtype: Data type for the model.
-            cache_dir: Directory to cache downloaded weights (only used for HF Hub).
-            revision: Specific model revision to download (only used for HF Hub).
-        """
-        
-        dit_filename = f"{revision}-model.safetensors"
+        if revision not in {"main", "post"}:
+            raise ValueError(
+                f"Unsupported revision {revision!r}; expected 'main' or 'post'."
+            )
+        if resolution != 256:
+            raise ValueError(
+                "The released RelightFormer checkpoints use 256x256 inference."
+            )
+
+        model_source = Path(pretrained_model_name_or_path).expanduser()
+        checkpoint_filename = f"{revision}-model.safetensors"
         vae_filename = "Wan2.1_VAE.pth"
-        
-        # Check if the provided path is a local directory
-        if os.path.isdir(pretrained_model_name_or_path):
-            dit_path = os.path.join(pretrained_model_name_or_path, dit_filename)
-            vae_path = os.path.join(pretrained_model_name_or_path, vae_filename)
-            
-            if not os.path.exists(dit_path):
-                raise FileNotFoundError(f"DIT weights not found at {dit_path}")
-            if not os.path.exists(vae_path):
-                raise FileNotFoundError(f"VAE weights not found at {vae_path}")
-                
-            print(f"Loading DIT weights from local path: {dit_path}...")
-            print(f"Loading VAE weights from local path: {vae_path}...")
+
+        if model_source.is_dir():
+            local_root = model_source.resolve()
+            checkpoint_candidates = (
+                local_root / checkpoint_filename,
+                local_root / "checkpoints" / revision / checkpoint_filename,
+            )
+            vae_candidates = (
+                local_root / vae_filename,
+                local_root / "checkpoints" / "vae" / vae_filename,
+            )
+            checkpoint_path = next(
+                (path for path in checkpoint_candidates if path.is_file()), None
+            )
+            vae_path = next((path for path in vae_candidates if path.is_file()), None)
+
+            if checkpoint_path is None:
+                checked = "\n  - ".join(str(path) for path in checkpoint_candidates)
+                raise FileNotFoundError(
+                    f"RelightFormer checkpoint not found. Checked:\n  - {checked}"
+                )
+            if vae_path is None:
+                checked = "\n  - ".join(str(path) for path in vae_candidates)
+                raise FileNotFoundError(
+                    f"Wan VAE checkpoint not found. Checked:\n  - {checked}"
+                )
         else:
-            # Download from Hugging Face Hub
-            dit_subfolder = f"checkpoints/{revision}"
-            vae_subfolder = "checkpoints/vae"
-            
-            print(f"Downloading DIT weights from {pretrained_model_name_or_path}/{dit_subfolder}/{dit_filename}...")
-            dit_path = hf_hub_download(
-                repo_id=pretrained_model_name_or_path,
-                filename=dit_filename,
-                subfolder=dit_subfolder,
-                cache_dir=cache_dir,
-                revision=revision
+            print(
+                f"Downloading {checkpoint_filename} from "
+                f"{pretrained_model_name_or_path}@{hub_revision} ..."
             )
-            
-            print(f"Downloading VAE weights from {pretrained_model_name_or_path}/{vae_subfolder}/{vae_filename}...")
-            vae_path = hf_hub_download(
-                repo_id=pretrained_model_name_or_path,
-                filename=vae_filename,
-                subfolder=vae_subfolder,
-                cache_dir=cache_dir,
-                revision=revision
+            checkpoint_path = Path(
+                hf_hub_download(
+                    repo_id=pretrained_model_name_or_path,
+                    filename=checkpoint_filename,
+                    cache_dir=cache_dir,
+                    revision=hub_revision,
+                )
             )
-        
-        # Initialize ModelManager directly and load the weights
-        model_manager = ModelManager(torch_dtype=torch.bfloat16, device=device)
-        model_manager.load_models([dit_path, vae_path])
-        
-        # Instantiate the pipeline
+
+            print(
+                f"Downloading {vae_filename} from "
+                f"{pretrained_model_name_or_path}@{hub_revision} ..."
+            )
+            vae_path = Path(
+                hf_hub_download(
+                    repo_id=pretrained_model_name_or_path,
+                    filename=vae_filename,
+                    cache_dir=cache_dir,
+                    revision=hub_revision,
+                )
+            )
+
+        device = torch.device(device)
+
+        # Construct the final RelightFormer architecture on the meta device so no
+        # temporary randomly initialized 1.3B-parameter model consumes CPU/GPU RAM.
+        with init_empty_weights():
+            relightformer = RelightFormerModel(
+                dim=1536,
+                in_dim=16,
+                ffn_dim=8960,
+                out_dim=16,
+                freq_dim=256,
+                eps=1e-6,
+                patch_size=(1, 2, 2),
+                num_heads=12,
+                num_layers=30,
+                has_image_input=False,
+            )
+
+            # These final RelightFormer modules must exist before loading so their
+            # trained checkpoint tensors are restored rather than discarded.
+            for block in relightformer.blocks:
+                block.lighting_attn = LightingAttention(
+                    block.self_attn.dim,
+                    block.self_attn.head_dim,
+                    eps=relightformer.eps,
+                )
+                block.self_attn.attn = RopeDotProductAttention(
+                    block.self_attn.head_dim,
+                    patches_x=resolution // 16,
+                    patches_y=resolution // 16,
+                    image_width=resolution,
+                    image_height=resolution,
+                    rope="PRoPE",
+                )
+
+        # Verify an exact architecture/checkpoint match, then stream one tensor at a
+        # time to the target device. There is no intermediate Wan DiT model.
+        expected_keys = set(relightformer.state_dict().keys())
+        with safe_open(
+            str(checkpoint_path), framework="pt", device="cpu"
+        ) as checkpoint:
+            checkpoint_keys = set(checkpoint.keys())
+            missing_keys = sorted(expected_keys - checkpoint_keys)
+            unexpected_keys = sorted(checkpoint_keys - expected_keys)
+
+            if missing_keys or unexpected_keys:
+                messages = []
+                if missing_keys:
+                    messages.append(f"missing keys: {missing_keys[:20]}")
+                if unexpected_keys:
+                    messages.append(f"unexpected keys: {unexpected_keys[:20]}")
+                raise RuntimeError(
+                    "Checkpoint does not exactly match RelightFormer: "
+                    + "; ".join(messages)
+                )
+
+            for tensor_name in tqdm(
+                checkpoint.keys(),
+                desc=f"Loading {revision} checkpoint",
+                dynamic_ncols=True,
+            ):
+                tensor = checkpoint.get_tensor(tensor_name)
+                set_module_tensor_to_device(
+                    relightformer,
+                    tensor_name,
+                    device,
+                    value=tensor,
+                    dtype=torch_dtype if tensor.is_floating_point() else None,
+                )
+
+        relightformer.requires_grad_(False)
+        relightformer.eval()
+
+        # Only the VAE uses ModelManager; the RelightFormer checkpoint does not.
+        vae_dtype = torch.float32 if torch_dtype == torch.float32 else torch.float16
+        model_manager = ModelManager(torch_dtype=vae_dtype, device=device)
+        model_manager.load_models([str(vae_path)])
+        vae = model_manager.fetch_model("wan_video_vae")
+        if vae is None:
+            raise RuntimeError(f"Unable to load Wan VAE checkpoint: {vae_path}")
+        vae.requires_grad_(False)
+        vae.eval()
+
         pipe = cls(device=device, torch_dtype=torch_dtype)
-        
-        # Fetch the VAE directly from the model manager
-        pipe.vae = model_manager.fetch_model("wan_video_vae")
-        
-        # Fetch the DIT from the model manager and initialize the RelightFormer model
-        wan_dit = model_manager.fetch_model("wan_video_dit")
-        pipe.dit = RelightFormerModel.init_from_wan_model(
-            wan_dit, 
-            division_factor=DIVISION_FACTOR, 
-            rope="PRoPE"
+        pipe.dit = relightformer
+        pipe.vae = vae
+        pipe.scheduler = FlowMatchScheduler(
+            shift=5,
+            sigma_min=0.0,
+            extra_one_step=True,
         )
-        
-        # Initialize the scheduler
-        pipe.scheduler = FlowMatchScheduler(shift=5, sigma_min=0.0, extra_one_step=True)
         pipe.scheduler.set_timesteps(1000, training=True)
-        
+        pipe.requires_grad_(False)
+        pipe.eval()
         return pipe
     
     def enable_vram_management(self, num_persistent_param_in_dit=None):
