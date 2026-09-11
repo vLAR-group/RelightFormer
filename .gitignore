@@ -20,6 +20,7 @@ __pycache__/
 .env.production.local
 *.pem
 *.key
+*.requirements.txt
 
 # ==========================================
 # Build Outputs & Distribution
@@ -82,4 +83,5 @@ Desktop.ini
 laval-objaverse-dataset/pairs
 laval-objaverse-dataset/rendered
 laval-objaverse-dataset/laval
+laval-objaverse-dataset/info
 output/

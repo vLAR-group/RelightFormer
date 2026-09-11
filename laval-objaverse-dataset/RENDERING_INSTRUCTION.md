@@ -31,15 +31,6 @@ pip install -U "huggingface_hub[cli]"
 
 ### 🚀 Reproduction Pipeline
 
-#### Step 1: Download Metadata & Configuration
-Fetch the relevant metadata and object-environment information from our Hugging Face repository:
-
-```bash
-mkdir -p info
-hf download vLAR/LavalObjaverseDataset "info/*" --local-dir ./info
-```
-
-#### Step 2: Launch the Rendering Process
 Once the prerequisites are met and the environment is configured, launch the automated rendering pipeline by running in default setting (10 GPUs, 16 workers per GPU, all splits):
 
 ```bash
