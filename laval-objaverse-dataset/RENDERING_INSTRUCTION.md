@@ -18,18 +18,15 @@ Before proceeding, you must fetch the source files for the Laval Indoor/Outdoor 
 
 #### 2. Blender Installation
 The dataset images are rendered using **Blender**. For exact reproducibility, we used **Blender 4.3.2 (Linux x64)**.  
+
 🔗 [Download Blender 4.3.2](https://www.blender.org/download/release/Blender4.3/blender-4.3.2-linux-x64.tar.xz) *(or select your OS equivalent from the [official Blender website](https://www.blender.org/download/))*.
 
-#### 3. Hugging Face CLI
-Ensure you have the Hugging Face CLI installed to download the metadata. If you haven't installed it yet, you can do so via pip:
-```bash
-pip install -U "huggingface_hub[cli]"
-```
-*(Don't forget to authenticate with `huggingface-cli login` if the repository requires it).*
-
+#### 3. Metadata
+Ensure you have the Hugging Face CLI installed to download the metadata:
 ```bash
 hf download "vLAR/LavalObjaverseDataset" --repo-type dataset --include "info/*" --local-dir .
 ```
+*(Don't forget to authenticate with `huggingface-cli login` if the repository requires it).*
 
 ---
 
