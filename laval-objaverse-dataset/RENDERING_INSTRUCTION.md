@@ -27,6 +27,10 @@ pip install -U "huggingface_hub[cli]"
 ```
 *(Don't forget to authenticate with `huggingface-cli login` if the repository requires it).*
 
+```bash
+hf download "vLAR/LavalObjaverseDataset" --repo-type dataset --include "info/*" --local-dir .
+```
+
 ---
 
 ### 🚀 Reproduction Pipeline
