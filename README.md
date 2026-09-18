@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">RelightFormer: Feed-Forward Generative Transformer for Multi-View Object Relighting</h1>
+  <h1 align="center">RelightFormer: Feed-Forward Generative Transformer for Multiview Object Relighting</h1>
   <p align="center">
     <strong>SIGGRAPH Asia 2026</strong>
   </p>
